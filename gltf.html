@@ -1,0 +1,184 @@
+<html>
+  <head>
+    <title>Interactive Annotations</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background-color: #eaeaea;
+      }
+
+      #myCanvas {
+        display: block;
+      }
+
+      .annotation {
+        position: absolute;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 5px 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        pointer-events: auto;
+        cursor: pointer;
+        display: none;
+      }
+
+      .draggable-box {
+        position: absolute;
+        width: 200px;
+        padding: 10px;
+        background: #fff;
+        border: 1px solid #aaa;
+        border-radius: 4px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
+        display: none;
+      }
+
+      .draggable-box .title {
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+
+      .draggable-box .description {
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="myCanvas"></canvas>
+    <div id="infoBox" class="draggable-box">
+      <div class="title"></div>
+      <div class="description"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/104/three.js"></script>
+    <script src="GLTFLoader.js"></script>
+    <script src="OrbitControls.js"></script>
+
+    <script>
+      // Scene setup
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 25, -50);
+
+      const renderer = new THREE.WebGLRenderer({
+        canvas: document.getElementById("myCanvas"),
+        antialias: true,
+        alpha: true,
+      });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+      const orbit = new THREE.OrbitControls(camera, renderer.domElement);
+      orbit.update();
+
+      // Lighting
+      const light = new THREE.AmbientLight(0xffffff, 3);
+      scene.add(light);
+
+      // Load 3D model
+      const loader = new THREE.GLTFLoader();
+      loader.load("3.glb", function (gltf) {
+        const model = gltf.scene;
+        scene.add(model);
+      });
+
+      // Helper function to add an annotation
+      function addAnnotation(position, title, description) {
+        const annotationDiv = document.createElement("div");
+        annotationDiv.className = "annotation";
+        annotationDiv.textContent = title;
+        document.body.appendChild(annotationDiv);
+
+        const point = new THREE.Mesh(
+          new THREE.SphereGeometry(0.2, 16, 16),
+          new THREE.MeshBasicMaterial({ color: 0xff0000 })
+        );
+        point.position.copy(position);
+        point.userData = { title, description }; // Store data for interaction
+        scene.add(point);
+
+        function updateAnnotationPosition() {
+          const screenPos = toScreenPosition(point, camera);
+          annotationDiv.style.left = `${screenPos.x}px`;
+          annotationDiv.style.top = `${screenPos.y}px`;
+        }
+
+        renderer.setAnimationLoop(() => {
+          renderer.render(scene, camera);
+          updateAnnotationPosition();
+        });
+
+        annotationDiv.style.display = "block";
+
+        // Make annotation clickable
+        annotationDiv.addEventListener("click", (event) => {
+          const rect = annotationDiv.getBoundingClientRect();
+          showInfoBox(title, description, rect.left, rect.bottom);
+        });
+      }
+
+      // Show draggable info box
+      const infoBox = document.getElementById("infoBox");
+      function showInfoBox(title, description, x, y) {
+        infoBox.querySelector(".title").textContent = title;
+        infoBox.querySelector(".description").textContent = description;
+        infoBox.style.left = `${x}px`;
+        infoBox.style.top = `${y}px`;
+        infoBox.style.display = "block";
+      }
+
+      // Add annotations
+      addAnnotation(new THREE.Vector3(-1.52, -10.54, -1.0), "Hair Papilla", "Hair dermal papilla cells are specialized mesenchymal cells that exist in the dermal papilla located at the bottom of hair follicles. These cells play pivotal roles in hair formation, growth, and cycling.");
+
+
+      // Dragging functionality for the info box
+      let isDragging = false;
+      let dragOffset = { x: 0, y: 0 };
+
+      infoBox.addEventListener("mousedown", (event) => {
+        isDragging = true;
+        dragOffset.x = event.clientX - infoBox.offsetLeft;
+        dragOffset.y = event.clientY - infoBox.offsetTop;
+      });
+
+      document.addEventListener("mousemove", (event) => {
+        if (isDragging) {
+          infoBox.style.left = `${event.clientX - dragOffset.x}px`;
+          infoBox.style.top = `${event.clientY - dragOffset.y}px`;
+        }
+      });
+
+      document.addEventListener("mouseup", () => {
+        isDragging = false;
+      });
+
+      // Render loop
+      function render() {
+        renderer.render(scene, camera);
+        requestAnimationFrame(render);
+      }
+      render();
+
+      // Helper: Convert 3D position to screen position
+      function toScreenPosition(obj, camera) {
+        const vector = new THREE.Vector3();
+        const widthHalf = 0.5 * renderer.getContext().canvas.width;
+        const heightHalf = 0.5 * renderer.getContext().canvas.height;
+
+        obj.updateMatrixWorld();
+        vector.setFromMatrixPosition(obj.matrixWorld);
+        vector.project(camera);
+
+        vector.x = vector.x * widthHalf + widthHalf;
+        vector.y = -(vector.y * heightHalf) + heightHalf;
+
+        return {
+          x: vector.x,
+          y: vector.y,
+        };
+      }
+    </script>
+  </body>
+</html>
